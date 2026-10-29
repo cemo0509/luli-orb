@@ -9,15 +9,15 @@
 
 ## 一句话方案
 
-**Ø110 玻璃（或亚克力）透明球壳 + Ø99 黑色哑光内胆 + 1.75" 圆 AMOLED（466×466）装在内胆前窗后面 + Ø110×14 底座（电池/喇叭/灯环/磁吸充电）。**
+**Ø70 实心玻璃半球（凸面朝前、平面朝后）+ Ø68 黑色哑光遮光盖（贴平面）+ 1.75" 圆 AMOLED（Ø44.4）装在遮光盖中心的 Ø50 窗后 + 机身（电池/喇叭/灯环）。**
 
-眼睛之所以「浮」在球里，靠的不是投影也不是全息，而是三件事：
+眼睛之所以「浮」在球心，靠的不是投影也不是全息，而是三件事：
 
-1. **AMOLED 纯黑**——不亮的地方是真黑，屏的圆形边界和黑内胆完全融合，看不见屏幕在哪；
-2. **黑内胆做成整球**，不是一个小盒子——所以「一整块黑」铺满球的前 2/3，眼睛浮在这块黑上；
-3. **屏退到球面后 10mm**——从侧面看，眼睛相对球壳轮廓有位移，大脑判定「它在里面」。
+1. **屏放在球心所在的平面上**——球心那一点发出的光，打到内外球面时**入射角都是 0°**，不折射 → 不放大、不位移、不畸变；
+2. **球是实心的**——光从平面进、从球面出，走的是整块玻璃，才有"晶体"的厚度感；
+3. **AMOLED 纯黑 + 哑光遮光盖**——屏不亮的地方是真黑，屏的圆形边界和遮光盖完全融合，看不见屏幕在哪。
 
-这条链路便宜、可复现、不依赖任何特殊光学件。想放大眼睛再加平凸透镜（见 `docs/02`）。
+这条链路不需要开孔、不需要合缝、不需要任何特殊光学件。
 
 ---
 
@@ -25,69 +25,80 @@
 
 | 文件 | 内容 |
 |---|---|
+| [MEMORY.md](MEMORY.md) | ★ **项目长期记忆**：铁律、参数、踩过的坑。新会话先读这个 |
 | [docs/01_product.md](docs/01_product.md) | 产品定义、参考产品逐帧拆解、归一化测量、差异定位 |
-| [docs/02_optics.md](docs/02_optics.md) | 显示与光学：为什么必须 AMOLED、屏边怎么藏、视差、遮光、放大方案 |
-| [docs/03_mechanical.md](docs/03_mechanical.md) | 结构分件、尺寸链、球壳工艺、内胆、底座、磁吸、散热、重心 |
+| [docs/02_optics.md](docs/02_optics.md) | 显示与光学：为什么必须 AMOLED、屏边怎么藏、视差、遮光 |
+| [docs/03_mechanical.md](docs/03_mechanical.md) | 结构分件、尺寸链、公差、打印参数 |
 | [docs/04_electronics.md](docs/04_electronics.md) | 主控/供电/音频/灯环/接线表 |
 | [docs/05_software.md](docs/05_software.md) | 小智固件、眼睛引擎、情绪状态机、MCP 工具、配网 OTA |
 | [docs/06_bom.md](docs/06_bom.md) | BOM、成本、采购注意 |
 | [docs/07_assembly.md](docs/07_assembly.md) | 装配工艺、粘接、消光、检验清单 |
 | [docs/08_roadmap.md](docs/08_roadmap.md) | 四阶段路线图、风险表、待决策项 |
-| [docs/09_purchase.md](docs/09_purchase.md) | **买什么**：屏/芯片要不要买、下单清单、搜索词、MVP 接线 |
-| [docs/10_shell_material.md](docs/10_shell_material.md) | **球壳材料**：玻璃 vs 亚克力 vs PC、开孔解法、UV 粘接、采购规格书 |
-| [docs/11_solid_ball.md](docs/11_solid_ball.md) | **实心球假设**：球当透镜的光学账、5 分钟判定实验、H2 简化结构 |
-| [docs/12_face_ui.md](docs/12_face_ui.md) | **面部 UI · 探索**：五种设计语言、状态矩阵 |
-| [docs/13_face_spec.md](docs/13_face_spec.md) | **面部定稿「一滴光」**：token、七状态关键帧、LVGL 落地方案与验收 |
-| [hardware/params.py](hardware/params.py) | 参数计算器：改球径/屏尺寸，一键出全部尺寸与像素坐标 |
-| [hardware/ball_lens.py](hardware/ball_lens.py) | 实心整球透镜核算：放大率 / 可见视场 / 屏上应有的眼睛像素 |
-| [hardware/hemisphere.py](hardware/hemisphere.py) | **实心半球方案**：球径 → 屏占比 / 遮光板 / 眼睛像素 / 重量 |
-| [hardware/gen_face_assets.py](hardware/gen_face_assets.py) | 生成面部固件资源（bloom / hot / glint 三张 PNG） |
+| [docs/09_purchase.md](docs/09_purchase.md) | ★ **买什么**：球/板/配件的下单清单、价位与卖家红线 |
+| [docs/10_shell_material.md](docs/10_shell_material.md) | 球壳材料：玻璃 vs 亚克力 vs PC、UV 粘接 |
+| [docs/11_solid_ball.md](docs/11_solid_ball.md) | ★ **实心/空心/整球**的全部论证（为什么是半球） |
+| [docs/12_face_ui.md](docs/12_face_ui.md) | 面部 UI · 探索：五种设计语言 |
+| [docs/13_face_spec.md](docs/13_face_spec.md) | ★ **面部定稿「一滴光」**：token、七状态、行为引擎、验收 |
+| [hardware/hemisphere.py](hardware/hemisphere.py) | ★ 球径 → 屏占比 / 遮光板 / 眼睛像素 / 重量 |
+| [hardware/back_cover.scad](hardware/back_cover.scad) | ★ 遮光后盖参数化模型（改 `BALL_D` 一个数） |
+| [hardware/gen_face_assets.py](hardware/gen_face_assets.py) | 生成面部固件资源（bloom / hot / glint） |
+| [hardware/params.py](hardware/params.py) | 早期空心球方案的参数计算器（存档） |
+| [hardware/ball_lens.py](hardware/ball_lens.py) | 整球透镜核算（对照组，方案已否） |
 | [firmware/assets/](firmware/assets) | 面部资源：bloom.png / hot.png / glint.png（合计 7.3 KB） |
-| [tools/eye-preview.html](tools/eye-preview.html) | **眼睛 UI 预览**：浏览器打开即可看 466×466 实尺寸效果（9 种状态 + 球内模拟） |
-| [tools/ball-view.html](tools/ball-view.html) | **实心球视角模拟**：屏幕画面 vs 透过 Ø100 球放大 3.52× 看到的样子 |
-| [tools/face-lab.html](tools/face-lab.html) | **面部实验台**：五个探索概念实时切换（`?c=tide&s=listen`） |
-| [tools/face-iris.html](tools/face-iris.html) | **面部定稿**：实尺寸 + 球内预览 + 单眼 3× 像素验收（`?s=listen`） |
+| [tools/face-iris.html](tools/face-iris.html) | ★ **面部预览**：实尺寸 + 球内预览 + 行为引擎开关 + 3× 像素验收 |
+| [tools/ball-view.html](tools/ball-view.html) | 整球透镜视角模拟（对照用） |
+| [tools/face-lab.html](tools/face-lab.html) | 面部五概念实验台（存档） |
+| [tools/eye-preview.html](tools/eye-preview.html) | 早期眼睛 UI 预览（存档） |
+| [logs/](logs) | 每日工作记录 |
 
 ---
 
-## 关键尺寸（由 `hardware/params.py` 生成，勿手改）
+## 关键尺寸
 
 | 项 | 值 |
 |---|---|
-| 球壳 | Ø110 外径 / 3.0 壁厚 / Ø104 内径 |
-| 内胆 | Ø99 外径 / 2.5 壁厚 / Ø94 内腔 |
-| 球壳↔内胆间隙 | 2.5（单边） |
-| 前窗 | Ø50 开孔，屏 Ø44.4，单边压边 2.8 |
-| 屏 | 1.75" 466px = 266 ppi，1px = 0.0954mm |
-| 屏面位置 | 球心前 42.0mm，距球壳内表面 10.0mm |
-| 眼睛 | 宽 7.0 × 高 17.6mm，中心距 23.6mm（=74×185px，间距 248px，R37） |
-| 底座 | Ø110 × 14 |
-| 整机 | Ø110 × **116**，约 **505g** |
+| 球壳 | **Ø70 实心半球**，高 35（平面过球心），亚克力 106.6g |
+| 屏 | 1.75" AMOLED，Ø44.4 有效区，466×466，**1px = 0.0954mm** |
+| 屏占比 | 63.5%，四周黑边 12.8mm |
+| 黑遮光盖 | **Ø68 × 2**，中心开 **Ø50** 窗，四角 M2 盲孔 |
+| 主板 | Ø51.2 × 12.1（屏板一体，屏在其前表面） |
+| 眼睛 | **59 × 147 px**（=5.6×14.0mm，20% 球径），中心距 190px（25.9%），y=236 |
+| 机身 | 约 Ø66 × 26，含 1000mAh + 喇叭 + 灯环 |
+| 整机 | 约 Ø70 × 75，**≈ 330g** |
 
-> 先在浏览器里打开 `tools/eye-preview.html`，确认眼睛"好不好看"——这一步不用花一分钱，也不用拆打印机。
+> 参数改动请跑 `python hardware/hemisphere.py <球径>`，别手算。
 
 ---
 
 ## 现在到哪一步
 
 - [x] 参考产品逐帧拆解、比例归一化
-- [x] 三条光学路线对比，选定「黑内胆 + AMOLED 贴窗」
-- [x] 全尺寸链推导，参数化脚本可跑
-- [ ] V0.1 光学验证（买球壳 + 贴屏看效果，一天）
-- [ ] V0.2 结构打样（内胆 + 底座，P2S 打印）
-- [ ] V0.3 电子联调（小智固件点亮）
-- [ ] V1.0 外观精修（溶剂粘接 + 抛光 / 阳极氧化底座）
+- [x] 光学路线收敛到「实心半球 + 屏在球心平面」
+- [x] 全尺寸链推导，参数化脚本 + SCAD 可跑
+- [x] 面部 UI 定稿（v2，含行为引擎）
+- [x] 固件资源三张 PNG
+- [x] **球已买**：Ø70 实心半球 ¥28（烟林塑胶）
+- [ ] 球到货验收：称重 106.6g → 灯管测试 → 手机贴平面看眼睛
+- [ ] 定主板：1.43C-EN（Ø46/Ø36.75屏）或 1.75-B（Ø51/Ø44.4屏）
+- [ ] 打遮光后盖 + 机身（`back_cover.scad`，`BALL_D=70`）
+- [ ] 电子联调（小智固件点亮）
+- [ ] LVGL 面部组件 + 真机验收
 
 ---
 
-## 复用已有资产
+## 常见误解（先说清楚，少走弯路）
 
-本项目和 NOMI 外壳项目共用：拓竹 P2S 打印机、Bambu PLA Lite、微雪 ESP32-S3-Touch-AMOLED-1.75-B（SKU 31262，Ø51×12.1）。
-**这块板子的屏就是本项目的主角**——不用另买屏，板子背面朝内胆后方，屏面朝前窗。
+| 误解 | 事实 |
+|---|---|
+| 球应该是整球 | ❌ 整球是球透镜，放大 3.5×、可见区只剩 Ø28、要"弹性顶球"机构。**必须半球** |
+| 球越大越好 | ❌ Ø70 已够（屏占 63.5%）；Ø100 贵 3 倍、重 3 倍，观感提升有限 |
+| 一定要实心，空心不行 | ⚠️ 光学上等效，但空心罩口不规整、封板漏光、面型有波纹 —— 省 ¥30 换三个变量 |
+| 屏贴球外表面也行 | ❌ 贴外表面 = 3.5 倍放大 + 严重球差，眼睛会糊成一片 |
+| 眼睛做好看就够了 | ❌ 静止的眼睛 10 秒内会被判定为"一张图"。必须有**扫视 + 非对称 + 眨眼变体** |
 
 ---
 
 ## 许可
 
 文档 CC BY-NC-SA 4.0；硬件脚本 MIT。
-参考产品「路遥」为他人作品，本项目仅做结构原理学习与自用复刻，不用于销售。
+参考产品「程野与路遥」为他人作品，本项目仅做结构原理学习与自用复刻，不用于销售。
