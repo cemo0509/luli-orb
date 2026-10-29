@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>琉璃 ORB · 眼睛 UI 预览（466×466 实尺寸）</title>
+<style>
+  :root{--bg:#0b0c0e;--panel:#14161a;--line:#242830;--txt:#e6e9ef;--dim:#8b93a3;--cy:#12a3bd;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;
+       display:flex;gap:28px;padding:24px 28px;flex-wrap:wrap}
+  h1{font-size:15px;font-weight:600;margin:0 0 14px;letter-spacing:.5px}
+  .stage{display:flex;gap:22px;align-items:flex-start}
+  .screen{width:466px;height:466px;border-radius:50%;overflow:hidden;
+          box-shadow:0 0 0 1px #22262e, 0 18px 60px rgba(0,0,0,.7);position:relative;flex:0 0 auto}
+  canvas{display:block;width:466px;height:466px;background:#000}
+  .orb{width:320px;height:320px;border-radius:50%;position:relative;flex:0 0 auto;
+       background:radial-gradient(circle at 32% 26%, #232830 0%, #0d0f13 45%, #06070a 70%);
+       box-shadow:inset 0 0 40px rgba(160,200,220,.10), 0 20px 60px rgba(0,0,0,.8),
+                  0 0 0 1px rgba(180,200,220,.14);overflow:hidden}
+  .orb .inner{position:absolute;inset:14%;border-radius:50%;background:#000;
+              box-shadow:0 0 30px 8px rgba(0,0,0,.9)}
+  .orb canvas{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.60);width:466px;height:466px;clip-path:circle(50% at 50% 50%)}
+  .orb .gloss{position:absolute;inset:0;border-radius:50%;pointer-events:none;
+    background:radial-gradient(ellipse 42% 26% at 30% 16%, rgba(255,255,255,.30), rgba(255,255,255,0) 70%),
+               radial-gradient(ellipse 60% 40% at 78% 84%, rgba(140,190,220,.10), rgba(255,255,255,0) 70%)}
+  .panel{min-width:300px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+  button{background:#1c2027;color:var(--txt);border:1px solid #2c313b;border-radius:8px;
+         padding:7px 11px;font-size:12.5px;cursor:pointer;font-family:inherit}
+  button:hover{background:#242a33;border-color:#3a4150}
+  button.on{background:#0d3b45;border-color:var(--cy);color:#9fe8f5}
+  .kv{display:flex;justify-content:space-between;font-size:12px;color:var(--dim);
+      padding:3px 0;border-bottom:1px dashed #1e222a}
+  .kv b{color:var(--txt);font-weight:500}
+  .hint{font-size:11.5px;color:var(--dim);line-height:1.7;margin-top:10px}
+  input[type=range]{width:100%}
+  label.sl{display:block;font-size:11.5px;color:var(--dim);margin:8px 0 2px}
+</style>
+</head>
+<body>
+<div>
+  <h1>屏幕实尺寸 466×466（1px = 0.0954mm）</h1>
+  <div class="stage">
+    <div class="screen"><canvas id="c1" width="466" height="466"></canvas></div>
+    <div class="orb">
+      <div class="inner"></div>
+      <canvas id="c2" width="466" height="466"></canvas>
+      <div class="gloss"></div>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <h1 style="margin-bottom:10px">状态</h1>
+  <div class="row" id="states"></div>
+  <div class="kv"><span>眼宽</span><b>74 px / 7.0 mm</b></div>
+  <div class="kv"><span>眼高</span><b>185 px / 17.6 mm</b></div>
+  <div class="kv"><span>中心距</span><b>248 px / 23.6 mm</b></div>
+  <div class="kv"><span>占球径</span><b>16.0 %</b></div>
+  <div class="kv"><span>帧率</span><b id="fps">–</b></div>
+  <div class="kv"><span>h / y / r</span><b id="dbg">–</b></div>
+
+  <label class="sl">亮度 <span id="brv">100%</span></label>
+  <input type="range" id="br" min="15" max="100" value="100">
+
+  <label class="sl">外发光 <span id="glv">0.55</span></label>
+  <input type="range" id="gl" min="0" max="100" value="55">
+
+  <div class="hint">
+    右图模拟"装进球里"的效果：黑内胆 + 透明球壳高光。<br>
+    关键：背景必须是 <code>#000000</code>，眼球边缘要软、要有微动，否则 10 秒内就会被看成图片。
+  </div>
+</div>
+
+<script>
+const CANVAS = [document.getElementById('c1'), document.getElementById('c2')];
+const ctxs = CANVAS.map(c => c.getContext('2d'));
+const W = 466, CX = W/2;
+
+// ===== 8 参数眼睛模型 =====
+const BASE = { w:74, h:185, gap:248, y:250, r:0.5, tilt:0, hue:186, sat:0.55, squint:0 };
+
+const PRESETS = {
+  idle:    { w:74, h:185, gap:248, y:250, r:0.5, tilt:0,   hue:186, sat:0.55, squint:0,   blink:true,  breath:3  },
+  listen:  { w:78, h:200, gap:246, y:242, r:0.5, tilt:0,   hue:186, sat:0.55, squint:0,   blink:false, breath:1.2},
+  think:   { w:70, h:150, gap:252, y:256, r:0.5, tilt:-3,  hue:196, sat:0.40, squint:0,   blink:false, breath:0, sway:1 },
+  speak:   { w:74, h:172, gap:248, y:252, r:0.5, tilt:0,   hue:186, sat:0.60, squint:0,   blink:false, breath:0, talk:1 },
+  sleep:   { w:88, h:8,   gap:248, y:262, r:0.5, tilt:0,   hue:186, sat:0.20, squint:0,   blink:false, breath:0.6, dim:0.35},
+  happy:   { w:80, h:120, gap:250, y:246, r:0.5, tilt:0,   hue:178, sat:0.70, squint:0.55,blink:false, breath:2  },
+  sad:     { w:72, h:150, gap:244, y:268, r:0.5, tilt:-8,  hue:200, sat:0.25, squint:0,   blink:false, breath:1  },
+  angry:   { w:70, h:92,  gap:240, y:252, r:0.5, tilt:12,  hue:352, sat:0.75, squint:0,   blink:false, breath:0.5},
+  love:    { w:76, h:185, gap:246, y:250, r:0.5, tilt:0,   hue:330, sat:0.55, squint:0,   blink:true,  breath:3, glow:1.4},
+};
+
+let cur = {...PRESETS.idle}, target = {...PRESETS.idle};
+let state = 'idle', t0 = performance.now(), nextBlink = 2.4, blinkT = -1;
+let brightness = 1, glowK = 0.55;
+
+// 状态按钮
+const wrap = document.getElementById('states');
+Object.keys(PRESETS).forEach(k => {
+  const b = document.createElement('button');
+  b.textContent = k; b.dataset.k = k;
+  if (k === 'idle') b.classList.add('on');
+  b.onclick = () => {
+    state = k; target = {...PRESETS[k]}; t0 = performance.now();
+    [...wrap.children].forEach(x => x.classList.toggle('on', x.dataset.k === k));
+    nextBlink = 1.5 + Math.random()*3;
+  };
+  wrap.appendChild(b);
+});
+
+document.getElementById('br').oninput = e => {
+  brightness = e.target.value/100;
+  document.getElementById('brv').textContent = e.target.value + '%';
+};
+document.getElementById('gl').oninput = e => {
+  glowK = e.target.value/100;
+  document.getElementById('glv').textContent = (e.target.value/100).toFixed(2);
+};
+
+function lerp(a, b, t){ return a + (b-a)*t; }
+function easeOut(t){ return 1 - Math.pow(1-t, 3); }
+
+function step(dt){
+  const k = Math.min(1, dt*4.2);
+  for (const key in target){
+    if (typeof target[key] === 'number' && key in cur) cur[key] = lerp(cur[key], target[key], k);
+  }
+  const tt = (performance.now() - t0)/1000;
+  let breath = 0, sway = 0, talk = 0;
+  if (target.breath) breath = Math.sin(tt * 2*Math.PI/4.2) * (target.breath||0);
+  if (target.sway) sway = Math.sin(tt*1.9) * 10;
+  if (target.talk) talk = Math.sin(tt*11) * 7 + Math.sin(tt*17)*3;
+
+  // 眨眼
+  let bh = cur.h;
+  if (target.blink){
+    if (blinkT < 0 && tt > nextBlink){ blinkT = 0; }
+    if (blinkT >= 0){
+      blinkT += dt;
+      const d = 0.13;
+      const p = blinkT / d;
+      if (p >= 1){ blinkT = -1; nextBlink = tt + 3.5 + Math.random()*3.5; }
+      else { bh = cur.h * (1 - Math.sin(Math.min(1,p)*Math.PI)); }
+    }
+  }
+  return { h: bh + breath + talk, y: cur.y + breath*0.3, gap: cur.gap, w: cur.w, r: cur.r,
+           sway, tilt: cur.tilt, hue: cur.hue, sat: cur.sat, squint: cur.squint,
+           dim: target.dim || 1 };
+}
+
+function drawEye(ctx, cx, cy, w, h, rad, hue, sat, alpha){
+  const r = Math.min(w/2, h/2) * (rad*2);
+  const g = ctx.createLinearGradient(cx, cy-h/2, cx, cy+h/2);
+  g.addColorStop(0, `hsla(${hue},${sat*100}%,88%,${alpha})`);
+  g.addColorStop(0.55, `hsla(${hue},${sat*100}%,66%,${alpha})`);
+  g.addColorStop(1, `hsla(${hue},${sat*100}%,52%,${alpha})`);
+  ctx.save();
+  ctx.shadowColor = `hsla(${hue},${sat*100}%,60%,${0.55*glowK})`;
+  ctx.shadowBlur = 26 * glowK;
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.roundRect(cx-w/2, cy-h/2, w, Math.max(1,h), Math.min(r, Math.min(w,h)/2));
+  ctx.fill();
+  ctx.restore();
+}
+
+function render(s){
+  ctxs.forEach(ctx => {
+    ctx.clearRect(0,0,W,W);
+    ctx.fillStyle = '#000000';            // ← 必须是纯黑
+    ctx.fillRect(0,0,W,W);
+
+    // 3% 径向渐变，避免"太干净"暴露屏边
+    const bg = ctx.createRadialGradient(CX, CX, 10, CX, CX, W*0.55);
+    bg.addColorStop(0, 'rgba(18,22,26,0.9)');
+    bg.addColorStop(1, 'rgba(0,0,0,1)');
+    ctx.fillStyle = bg; ctx.fillRect(0,0,W,W);
+
+    // 状态栏（仿手机）
+    ctx.save();
+    ctx.globalAlpha = 0.85 * brightness;
+    ctx.strokeStyle = '#8fd8e4'; ctx.lineWidth = 2;
+    ctx.strokeRect(96, 20, 22, 14);
+    ctx.fillStyle = '#8fd8e4'; ctx.beginPath();
+    ctx.arc(107, 27, 3.5, 0, 7); ctx.fill();
+    const d = new Date();
+    ctx.font = '600 30px "Microsoft YaHei", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0'), CX, 44);
+    ctx.strokeRect(352, 20, 40, 16);
+    ctx.fillRect(356, 24, 26, 8);
+    ctx.restore();
+
+    // 眼睛
+    const a = 0.95 * brightness * s.dim;
+    const hh = Math.max(1, s.h * (1 - s.squint*0.45));
+    ctx.save();
+    ctx.translate(CX, 0);
+    ctx.rotate(s.tilt * Math.PI/180);
+    ctx.translate(-CX, 0);
+    drawEye(ctx, CX - s.gap/2 + s.sway, s.y, s.w, hh, s.r, s.hue, s.sat, a);
+    drawEye(ctx, CX + s.gap/2 + s.sway, s.y, s.w, hh, s.r, s.hue, s.sat, a);
+    ctx.restore();
+  });
+}
+
+let last = performance.now(), fpsT = 0, fpsN = 0;
+function loop(now){
+  const dt = Math.min(0.05, (now-last)/1000); last = now;
+  const s = step(dt);
+  const dbe = document.getElementById('dbg');
+  if (dbe) dbe.textContent = s.h.toFixed(1) + ' / ' + s.y.toFixed(1) + ' / ' + s.r;
+  render(s);
+  fpsT += dt; fpsN++;
+  if (fpsT > 0.5){
+    const el = document.getElementById('fps');
+    if (el) el.textContent = Math.round(fpsN/fpsT) + ' fps';
+    fpsT = 0; fpsN = 0;
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

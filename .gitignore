@@ -1,0 +1,24 @@
+# 大文件不进仓库
+*.stl
+*.STL
+*.3mf
+*.3MF
+*.step
+*.stp
+*.fcstd
+
+# 渲染/切图中间件
+_vid/
+_frames/
+_render/
+*.bmp
+*.r1
+
+# 系统
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 但保留文档用的示意图
+!docs/assets/*.svg
+!docs/assets/*.png

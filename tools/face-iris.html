@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>琉璃 ORB · 面部 v2「一滴光 · 有视线」</title>
+<style>
+  :root{--bg:#08090b;--panel:#101319;--line:#1e222c;--txt:#e9edf4;--dim:#7f8798;--ac:#7fe6f2}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;
+       padding:18px 22px;display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start}
+  h1{font-size:12.5px;font-weight:600;margin:0 0 9px;letter-spacing:.6px}
+  h1 span{color:var(--dim);font-weight:400;margin-left:6px}
+  .scr{width:466px;height:466px;border-radius:8px;overflow:hidden;box-shadow:0 0 0 1px #1e222c;background:#000;flex:0 0 auto}
+  canvas{display:block}
+  .ball{width:300px;height:300px;border-radius:50%;position:relative;overflow:hidden;flex:0 0 auto;
+        box-shadow:0 0 0 1px rgba(190,210,230,.14), 0 24px 64px rgba(0,0,0,.85);background:#000}
+  .ball canvas{clip-path:circle(50% at 50% 50%)}
+  .gloss{position:absolute;inset:0;border-radius:50%;pointer-events:none;
+    background:radial-gradient(ellipse 37% 21% at 27% 13%, rgba(255,255,255,.20), rgba(255,255,255,0) 70%),
+               radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 62%, rgba(0,0,0,.48) 100%)}
+  .zoom{width:246px;height:432px;background:#000;border-radius:8px;overflow:hidden;
+        box-shadow:0 0 0 1px #1e222c;flex:0 0 auto}
+  .zoom canvas{width:246px;height:432px;image-rendering:pixelated}
+  .panel{width:300px;background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:14px}
+  .states{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
+  button{background:#171b22;color:var(--txt);border:1px solid #262b36;border-radius:7px;padding:8px 6px;
+         font-size:12px;cursor:pointer;font-family:inherit}
+  button:hover{background:#1d222b}
+  button.on{border-color:var(--ac);color:#a9eef8;background:#0b3a43}
+  .toggle{width:100%;margin-bottom:12px;padding:10px;font-size:12.5px;text-align:left}
+  .kv{display:flex;justify-content:space-between;font-size:11px;color:var(--dim);padding:3px 0;border-bottom:1px dashed #1a1e26}
+  .kv b{color:var(--txt);font-weight:500;font-variant-numeric:tabular-nums}
+  .note{font-size:10.5px;color:var(--dim);line-height:1.62;margin-top:9px}
+  .note b{color:#a9eef8}
+</style>
+</head>
+<body>
+
+<div>
+  <h1>屏幕 466×466<span>实际尺寸</span></h1>
+  <div class="scr"><canvas id="c1" width="466" height="466"></canvas></div>
+</div>
+
+<div>
+  <h1>Ø70 实心半球内<span>屏占球径 63.5%</span></h1>
+  <div class="ball"><canvas id="c2" width="300" height="300"></canvas><div class="gloss"></div></div>
+</div>
+
+<div>
+  <h1>单眼 3× 像素验收<span>pixelated</span></h1>
+  <div class="zoom"><canvas id="c3" width="82" height="144"></canvas></div>
+</div>
+
+<div class="panel">
+  <button id="alive" class="toggle on">行为引擎：开（会看、会扫视）</button>
+
+  <h1 style="margin-bottom:9px">状态</h1>
+  <div class="states" id="sts"></div>
+
+  <div class="kv"><span>视线偏移</span><b id="k0">0, 0</b></div>
+  <div class="kv"><span>眼宽 × 眼高</span><b id="k1">59 × 147</b></div>
+  <div class="kv"><span>中心距</span><b id="k2">190 px</b></div>
+  <div class="kv"><span>眨眼</span><b id="k3">—</b></div>
+  <div class="kv"><span>帧率</span><b id="k4">—</b></div>
+
+  <div class="note">
+    刚才那版"呆"，是因为<b>两只眼睛永远对称、永远朝正前方、只会呼吸</b>。
+    真实的眼睛不会呼吸，它会——<b>跳</b>。<br>
+    点上面那个开关对比：同一个视觉，一个像活物，一个像呼吸灯。
+  </div>
+</div>
+
+<script>
+'use strict';
+const c1 = document.getElementById('c1'), x1 = c1.getContext('2d');
+const c2 = document.getElementById('c2'), x2 = c2.getContext('2d');
+const c3 = document.getElementById('c3'), x3 = c3.getContext('2d');
+const off = document.createElement('canvas'); off.width = 466; off.height = 466;
+const xo = off.getContext('2d');
+
+const W = 466, CX = W/2;
+const EYE_W = 59, EYE_H = 147, GAP = 190, EYE_Y = 236;
+const C_HI  = [244,255,255], C_MID = [138,240,250], C_LO = [28,158,190];
+
+const STATES = {
+  idle:  {h:1.00,w:1.00,glow:.55,sp:1.00,a:.95,hue:186,label:'待机',
+          gx:[-58,58], gy:[-20,26], gT:[1.3,3.4]},
+  listen:{h:1.06,w:1.10,glow:.88,sp:1.30,a:1.00,hue:186,label:'聆听',
+          gx:[-22,22], gy:[-22,-4], gT:[0.7,1.8]},
+  think: {h:0.90,w:0.94,glow:.45,sp:0.72,a:.90,hue:200,label:'思考',
+          gx:[-72,72], gy:[-38,-8], gT:[0.9,2.0]},
+  speak: {h:0.97,w:1.00,glow:1.00,sp:1.50,a:1.00,hue:178,label:'说话',
+          gx:[-14,14], gy:[-8,6],  gT:[0.6,1.4]},
+  happy: {h:0.80,w:1.16,glow:.92,sp:1.18,a:1.00,hue:170,label:'开心',
+          gx:[-40,40], gy:[-20,6], gT:[0.9,2.2]},
+  sad:   {h:0.88,w:0.93,glow:.34,sp:0.58,a:.85,hue:206,label:'低落',
+          gx:[-18,18], gy:[14,30], gT:[2.2,4.0]},
+  sleep: {h:0.075,w:1.30,glow:.18,sp:0.38,a:.55,hue:186,label:'休眠',
+          gx:[0,0], gy:[0,0], gT:[9,9]},
+};
+
+let state = 'idle', cur = Object.assign({}, STATES.idle), tgt = Object.assign({}, STATES.idle);
+let t = 0, alive = true, brightness = 1;
+
+const q = new URLSearchParams(location.search);
+if (q.get('s') && STATES[q.get('s')]) { state = q.get('s'); cur = Object.assign({}, STATES[state]); tgt = Object.assign({}, STATES[state]); }
+
+// 视线（扫视）系统
+const gaze = { x:0, y:0, sx:0, sy:0, tx:0, ty:0, t0:0, dur:.08, next:0.30 };
+const hist = [];
+function pickGaze(fast){
+  const S = STATES[state];
+  gaze.sx = gaze.x; gaze.sy = gaze.y;
+  gaze.tx = S.gx[0] + Math.random()*(S.gx[1]-S.gx[0]);
+  gaze.ty = S.gy[0] + Math.random()*(S.gy[1]-S.gy[0]);
+  gaze.t0 = t;
+  gaze.dur = fast ? (0.055 + Math.random()*0.035) : (0.065 + Math.random()*0.05);
+  gaze.next = t + S.gT[0] + Math.random()*(S.gT[1]-S.gT[0]);
+}
+
+// 眨眼系统（单/双/半）
+let blinkSeq = [], blinkNext = 2.6, blinkP = 0, blinkKind = '—';
+function scheduleBlink(){
+  const r = Math.random(), s0 = t + .12;
+  if (r < .62){ blinkSeq.push({s:s0,d:.13,pk:1}); blinkKind='单眨'; }
+  else if (r < .87){ blinkSeq.push({s:s0,d:.12,pk:1},{s:s0+.20,d:.12,pk:1}); blinkKind='双眨'; }
+  else { blinkSeq.push({s:s0,d:.20,pk:.55}); blinkKind='半眨'; }
+  blinkNext = s0 + 2.9 + Math.random()*3.4;
+}
+function blinkValue(){
+  let p = 0;
+  blinkSeq = blinkSeq.filter(function(b){ return t < b.s + b.d + .02; });
+  for (let i=0;i<blinkSeq.length;i++){
+    const b = blinkSeq[i];
+    if (t >= b.s && t <= b.s + b.d){
+      const k = (t - b.s)/b.d;
+      p = Math.max(p, Math.sin(Math.PI*k) * b.pk);
+    }
+  }
+  return p;
+}
+
+// 状态按钮
+const stBox = document.getElementById('sts');
+Object.keys(STATES).forEach(function(k){
+  const b = document.createElement('button');
+  b.textContent = STATES[k].label; b.dataset.k = k;
+  if (k === state) b.classList.add('on');
+  b.onclick = function(){
+    state = k;
+    if (alive){ pickGaze(true); setTimeout(function(){ tgt = Object.assign({}, STATES[k]); }, 70); }
+    else { tgt = Object.assign({}, STATES[k]); }
+    blinkNext = t + 1.6;
+    Array.prototype.forEach.call(stBox.children, function(x){ x.classList.toggle('on', x.dataset.k===k); });
+  };
+  stBox.appendChild(b);
+});
+const aliveBtn = document.getElementById('alive');
+aliveBtn.onclick = function(){
+  alive = !alive;
+  aliveBtn.classList.toggle('on', alive);
+  aliveBtn.textContent = alive ? '行为引擎：开（会看、会扫视）' : '行为引擎：关（只会呼吸）';
+  if (!alive){ gaze.x = gaze.y = gaze.tx = gaze.ty = 0; }
+};
+
+// 绘制
+function lerp(a,b,k){ return a + (b-a)*k; }
+function rgba(c,a){ return 'rgba('+c[0]+','+c[1]+','+c[2]+','+a.toFixed(3)+')'; }
+
+function capsule(ctx, cx, cy, w, h, s){
+  const ww = w*s, hh = Math.max(1, h*s), r = Math.min(ww, hh)/2;
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(cx-ww/2, cy-hh/2, ww, hh, r);
+  else ctx.rect(cx-ww/2, cy-hh/2, ww, hh);
+}
+
+function drawDrop(ctx, cx, cy, w, h, s, ph, idx, gx, gy){
+  const a = s.a * brightness, hue = s.hue;
+  const hx = gx*0.7 + Math.sin(ph*0.9 + idx*1.7)*w*0.05;
+  const hy = gy*0.7 + Math.cos(ph*0.7 + idx*1.1)*h*0.03;
+
+  ctx.save();
+  ctx.shadowColor = 'hsla('+hue+',62%,60%,'+(0.55*s.glow).toFixed(3)+')';
+  ctx.shadowBlur = 11 + 15*s.glow;
+  ctx.fillStyle = rgba(C_MID, a*0.55);
+  capsule(ctx, cx+hx*0.3, cy+hy*0.3, w, h, 1.0); ctx.fill();
+  ctx.restore();
+
+  [[1.30,.030],[1.17,.070],[1.08,.150],[1.00,.52]].forEach(function(L){
+    ctx.fillStyle = rgba(C_MID, a*L[1]);
+    capsule(ctx, cx, cy, w, h, L[0]); ctx.fill();
+  });
+
+  const g = ctx.createLinearGradient(cx, cy-h/2, cx, cy+h/2);
+  g.addColorStop(0,   rgba(C_HI,  a*0.98));
+  g.addColorStop(0.38,rgba(C_MID, a*0.92));
+  g.addColorStop(1,   rgba(C_LO,  a*0.86));
+  ctx.fillStyle = g;
+  capsule(ctx, cx, cy, w, h, 1.0); ctx.fill();
+
+  if (h > 12){
+    ctx.save();
+    capsule(ctx, cx, cy, w, h, 1.0); ctx.clip();
+    const rg = ctx.createRadialGradient(cx+hx, cy-h*0.20+hy, 1, cx+hx, cy-h*0.20+hy, h*0.46);
+    rg.addColorStop(0, rgba(C_HI, a*0.78));
+    rg.addColorStop(1, 'rgba(244,255,255,0)');
+    ctx.fillStyle = rg; ctx.fillRect(cx-w, cy-h, w*2, h*2);
+
+    const lw = Math.max(2, w*0.085), lx = cx - w*0.235 + hx*0.6;
+    const ly0 = cy - h*0.345, ly1 = cy + h*0.045;
+    const lg = ctx.createLinearGradient(lx, ly0, lx, ly1);
+    lg.addColorStop(0,  'rgba(255,255,255,0)');
+    lg.addColorStop(.22,'rgba(255,255,255,'+(a*0.62).toFixed(3)+')');
+    lg.addColorStop(.72,'rgba(255,255,255,'+(a*0.30).toFixed(3)+')');
+    lg.addColorStop(1,  'rgba(255,255,255,0)');
+    ctx.save();
+    ctx.shadowColor = 'rgba(255,255,255,'+(a*0.35).toFixed(3)+')';
+    ctx.shadowBlur = 5;
+    ctx.strokeStyle = lg; ctx.lineWidth = lw; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(lx, ly0); ctx.lineTo(lx, ly1); ctx.stroke();
+    ctx.restore();
+    ctx.restore();
+  }
+}
+
+function drawFrame(ctx, s, p){
+  ctx.fillStyle = '#000'; ctx.fillRect(0,0,W,W);
+  const bg = ctx.createRadialGradient(CX,CX,6, CX,CX,W*0.56);
+  bg.addColorStop(0,'rgba(13,16,20,.9)'); bg.addColorStop(1,'rgba(0,0,0,1)');
+  ctx.fillStyle = bg; ctx.fillRect(0,0,W,W);
+
+  const breath = 1 + Math.sin(t * (2*Math.PI/4.2)) * 0.02;
+  const h = Math.max(2, EYE_H * s.h * (1 - p));
+  const w = EYE_W * s.w * (1 + 0.34*p);
+  const s2 = Object.assign({}, s, {a: Math.min(1, s.a * (1 + 0.30*p) * breath)});
+
+  const lag = Math.max(0, hist.length - 4);
+  const g2 = hist[lag] || {x:0, y:0};
+
+  drawDrop(ctx, CX - GAP/2 + gaze.x, EYE_Y + gaze.y, w, h, s2, t*s.sp, 0, gaze.x, gaze.y);
+  drawDrop(ctx, CX + GAP/2 + g2.x*0.94, EYE_Y + g2.y*0.94, w*0.97, h*0.995, s2, t*s.sp, 1, g2.x, g2.y);
+}
+
+function render(){
+  blinkP = alive ? blinkValue() : blinkP*0.9;
+
+  drawFrame(xo, cur, blinkP);
+  x1.clearRect(0,0,W,W); x1.drawImage(off,0,0);
+
+  const d = Math.round(300 * 44.4/70);
+  x2.clearRect(0,0,300,300);
+  x2.fillStyle='#000'; x2.fillRect(0,0,300,300);
+  x2.drawImage(off, (300-d)/2, (300-d)/2, d, d);
+
+  const zx = Math.round(CX - GAP/2 + gaze.x - 41), zy = Math.round(EYE_Y + gaze.y - 72);
+  x3.imageSmoothingEnabled = false;
+  x3.drawImage(off, zx, zy, 82, 144, 0, 0, 82, 144);
+}
+
+// ── 仿真步进（抽出来，方便快进）
+function stepSim(dt){
+  t += dt;
+  if (alive){
+    if (t > gaze.next) pickGaze(false);
+    const k = Math.min(1, (t - gaze.t0)/gaze.dur);
+    const e = 1 - Math.pow(1-k, 3);
+    gaze.x = gaze.sx + (gaze.tx - gaze.sx)*e;
+    gaze.y = gaze.sy + (gaze.ty - gaze.sy)*e;
+    hist.push({x:gaze.x, y:gaze.y}); if (hist.length > 12) hist.shift();
+    if (t > blinkNext) scheduleBlink();
+  } else {
+    gaze.x *= 0.9; gaze.y *= 0.9;
+    hist.push({x:gaze.x, y:gaze.y}); if (hist.length > 12) hist.shift();
+    if (t > blinkNext){
+      blinkSeq.push({s:t+.12,d:.13,pk:1}); blinkKind='单眨';
+      blinkNext = t + 4.2 + Math.random()*2.6;
+    }
+  }
+  const kk = Math.min(1, dt*4.2);
+  ['h','w','glow','sp','a'].forEach(function(key){ cur[key] = lerp(cur[key], tgt[key], kk); });
+  cur.hue = lerp(cur.hue, tgt.hue, kk);
+}
+
+// ?warm=2.5 可以先快进 2.5 秒再出第一帧（用于截图/深链）
+const warm = parseFloat(q.get('warm') || '0');
+if (warm > 0){ const n = Math.round(warm*60); for (let i=0;i<n;i++) stepSim(1/60); }
+
+function updateLabels(){
+  document.getElementById('k0').textContent = gaze.x.toFixed(0)+', '+gaze.y.toFixed(0);
+  document.getElementById('k1').textContent = Math.round(EYE_W*cur.w)+' × '+Math.round(EYE_H*cur.h);
+  document.getElementById('k3').textContent = blinkP > .02 ? blinkKind : '—';
+}
+if (warm > 0) updateLabels();
+
+let last = performance.now(), acc = 0, frames = 0;
+function loop(now){
+  const dt = Math.min(0.05, (now-last)/1000); last = now;
+  stepSim(dt);
+  render();
+
+  acc += dt; frames++;
+  if (acc > 0.4){
+    updateLabels();
+    document.getElementById('k4').textContent = Math.round(frames/acc)+' fps';
+    acc = 0; frames = 0;
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

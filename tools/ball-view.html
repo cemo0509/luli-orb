@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>实心球视角模拟 · 屏幕内容 vs 透过球看到的</title>
+<style>
+  :root{--bg:#0b0c0e;--panel:#14161a;--line:#242830;--txt:#e6e9ef;--dim:#8b93a3;--cy:#12a3bd}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;
+       padding:22px 26px;display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start}
+  h1{font-size:14px;font-weight:600;margin:0 0 10px;letter-spacing:.4px;color:var(--txt)}
+  .cap{font-size:11.5px;color:var(--dim);margin-top:8px;line-height:1.6;max-width:466px}
+  .screen{width:466px;height:466px;border-radius:8px;overflow:hidden;box-shadow:0 0 0 1px #22262e;flex:0 0 auto}
+  canvas{display:block;background:#000}
+  .ballwrap{width:340px;height:340px;border-radius:50%;position:relative;overflow:hidden;flex:0 0 auto;
+            box-shadow:0 0 0 1px rgba(190,210,230,.18), 0 24px 70px rgba(0,0,0,.85)}
+  .ballwrap canvas{clip-path:circle(50% at 50% 50%)}
+  .gloss{position:absolute;inset:0;border-radius:50%;pointer-events:none;
+    background:radial-gradient(ellipse 40% 24% at 30% 15%, rgba(255,255,255,.26), rgba(255,255,255,0) 70%),
+               radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 58%, rgba(0,0,0,.55) 100%)}
+  .panel{min-width:300px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  label.sl{display:block;font-size:11.5px;color:var(--dim);margin:12px 0 3px}
+  input[type=range]{width:100%}
+  .kv{display:flex;justify-content:space-between;font-size:12px;color:var(--dim);padding:4px 0;border-bottom:1px dashed #1e222a}
+  .kv b{color:var(--txt);font-weight:500}
+  button{background:#1c2027;color:var(--txt);border:1px solid #2c313b;border-radius:8px;padding:7px 11px;
+         font-size:12.5px;cursor:pointer;font-family:inherit;margin:0 6px 6px 0}
+  button.on{background:#0d3b45;border-color:var(--cy);color:#9fe8f5}
+  .hint{font-size:11.5px;color:var(--dim);line-height:1.7;margin-top:12px}
+</style>
+</head>
+<body>
+<div>
+  <h1>① 屏幕上的原始画面（466×466）</h1>
+  <div class="screen"><canvas id="c1" width="466" height="466"></canvas></div>
+  <div class="cap">这就是你在固件里画的东西。<b>H1 空心方案</b>：眼高 185px；<b>H2 实心球方案</b>：眼高只有 48px。</div>
+</div>
+
+<div>
+  <h1>② 透过 Ø100 实心球看到的（放大 3.52×）</h1>
+  <div class="ballwrap">
+    <canvas id="c2" width="340" height="340"></canvas>
+    <div class="gloss"></div>
+  </div>
+  <div class="cap">球把屏幕中心 <b>Ø28.4mm（298px）</b>放大 3.52 倍填满整颗球，并推到球后 180mm 处。边缘会有球差/色差——这正是"整块黑"的由来。</div>
+</div>
+
+<div class="panel">
+  <h1 style="margin-bottom:10px">参数</h1>
+  <div>
+    <button class="on" data-h="48" data-g="64">H2 实心球</button>
+    <button data-h="185" data-g="248">H1 空心</button>
+  </div>
+
+  <label class="sl">眼高 <span id="hv">48</span> px</label>
+  <input type="range" id="eh" min="24" max="200" value="48">
+
+  <label class="sl">眼中心距 <span id="gv">64</span> px</label>
+  <input type="range" id="gp" min="30" max="280" value="64">
+
+  <label class="sl">眼宽 <span id="wv">19</span> px</label>
+  <input type="range" id="ew" min="8" max="90" value="19">
+
+  <div class="kv"><span>球径 / 放大率</span><b>Ø100 / 3.52×</b></div>
+  <div class="kv"><span>可见屏径</span><b>28.4 mm · 298 px</b></div>
+  <div class="kv"><span>球后虚像位置</span><b>≈180 mm</b></div>
+  <div class="kv"><span>屏上眼高 → 球上眼高</span><b id="conv">48px → 16.9% 球径</b></div>
+
+  <div class="hint">
+    把"眼高"从 48 拉到 185，看右边会变成什么样——<br>
+    这就是为什么<b>两套方案的 UI 不能共用</b>。<br>
+    实心球方案里，状态栏（时间/电量）会被放大到球外，必须删掉。
+  </div>
+</div>
+
+<script>
+const c1 = document.getElementById('c1'), x1 = c1.getContext('2d');
+const c2 = document.getElementById('c2'), x2 = c2.getContext('2d');
+const off = document.createElement('canvas'); off.width = 466; off.height = 466;
+const xo = off.getContext('2d');
+
+const W = 466, CX = 233;
+let eyeH = 48, eyeGap = 64, eyeW = 19;
+const M = 3.52;                 // 放大率
+const VIS = 466 / M;            // 可见屏区像素（≈132px 半径… 实际直径 298/… 见下）
+// 球轮廓对应的屏上直径 = 球径/M ，换算成像素：466px 屏对应 44.4mm → 1px=0.0954mm
+const MM_PER_PX = 44.4 / 466;
+const VIS_D = (100 / M) / MM_PER_PX;      // ≈298 px
+
+function drawScreen(ctx, h, gap, w){
+  ctx.clearRect(0,0,W,W);
+  ctx.fillStyle = '#000'; ctx.fillRect(0,0,W,W);
+
+  const y = CX;
+  // 眼
+  const r = Math.min(w/2, h/2);
+  [[CX-gap/2, y],[CX+gap/2, y]].forEach(([cx,cy])=>{
+    const g = ctx.createLinearGradient(cx, cy-h/2, cx, cy+h/2);
+    g.addColorStop(0,'#dffbff'); g.addColorStop(.55,'#7fe3f0'); g.addColorStop(1,'#3aa9c4');
+    ctx.save();
+    ctx.shadowColor = 'rgba(80,200,225,.55)';
+    ctx.shadowBlur = 8;
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(cx-w/2, cy-h/2, w, Math.max(1,h), Math.min(r, w/2));
+    else ctx.rect(cx-w/2, cy-h/2, w, Math.max(1,h));
+    ctx.fill();
+    ctx.restore();
+  });
+
+  // 状态栏（只在眼高较大时画，代表 H1）
+  if (h > 120){
+    ctx.strokeStyle = 'rgba(143,216,228,.85)'; ctx.lineWidth = 2;
+    ctx.strokeRect(96, 20, 22, 14);
+    ctx.fillStyle = 'rgba(143,216,228,.85)';
+    ctx.font = '600 30px "Microsoft YaHei", sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('16:19', CX, 44);
+    ctx.strokeRect(352, 20, 40, 16);
+  }
+}
+
+function render(){
+  drawScreen(xo, eyeH, eyeGap, eyeW);
+  drawScreen(x1, eyeH, eyeGap, eyeW);
+
+  // 球视角：把屏幕中心 VIS_D 方形的区域放大填满
+  const s = VIS_D, sx = (W - s)/2, sy = (W - s)/2;
+  x2.clearRect(0,0,340,340);
+  x2.fillStyle = '#000'; x2.fillRect(0,0,340,340);
+  x2.drawImage(off, sx, sy, s, s, 0, 0, 340, 340);
+
+  // 边缘像差暗示：轻微模糊 + 色散边
+  x2.save();
+  x2.globalCompositeOperation = 'lighter';
+  const rg = x2.createRadialGradient(170,170,90,170,170,170);
+  rg.addColorStop(0,'rgba(0,0,0,0)');
+  rg.addColorStop(.72,'rgba(30,80,120,.10)');
+  rg.addColorStop(1,'rgba(120,60,90,.20)');
+  x2.fillStyle = rg; x2.fillRect(0,0,340,340);
+  x2.restore();
+
+  const pct = (eyeH * MM_PER_PX * M) / 100 * 100;
+  document.getElementById('conv').textContent =
+    eyeH + 'px → ' + pct.toFixed(1) + '% 球径';
+}
+
+const eh = document.getElementById('eh'), gp = document.getElementById('gp'), ew = document.getElementById('ew');
+eh.oninput = e => { eyeH = +e.target.value; document.getElementById('hv').textContent = eyeH; render(); };
+gp.oninput = e => { eyeGap = +e.target.value; document.getElementById('gv').textContent = eyeGap; render(); };
+ew.oninput = e => { eyeW = +e.target.value; document.getElementById('wv').textContent = eyeW; render(); };
+
+document.querySelectorAll('.panel button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.panel button').forEach(o => o.classList.remove('on'));
+  b.classList.add('on');
+  eyeH = +b.dataset.h; eyeGap = +b.dataset.g;
+  eyeW = eyeH > 120 ? Math.round(eyeH*0.4) : Math.round(eyeH*0.4);
+  eh.value = eyeH; gp.value = eyeGap; ew.value = eyeW;
+  document.getElementById('hv').textContent = eyeH;
+  document.getElementById('gv').textContent = eyeGap;
+  document.getElementById('wv').textContent = eyeW;
+  render();
+});
+
+render();
+</script>
+</body>
+</html>

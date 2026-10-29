@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>琉璃 ORB · 面部实验台（Ø70 球 / 466×466 实尺寸）</title>
+<style>
+  :root{--bg:#0a0b0d;--panel:#12141a;--line:#232733;--txt:#e8ecf2;--dim:#8892a3;--ac:#5fd8ea}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;
+       padding:20px 24px;display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start}
+  h1{font-size:13px;font-weight:600;margin:0 0 10px;color:var(--txt);letter-spacing:.5px}
+  .scr{width:466px;height:466px;border-radius:10px;overflow:hidden;box-shadow:0 0 0 1px #22262e;flex:0 0 auto;background:#000}
+  canvas{display:block}
+  .ball{width:320px;height:320px;border-radius:50%;position:relative;overflow:hidden;flex:0 0 auto;
+        box-shadow:0 0 0 1px rgba(190,210,230,.16), 0 26px 70px rgba(0,0,0,.85);background:#000}
+  .ball canvas{clip-path:circle(50% at 50% 50%)}
+  .gloss{position:absolute;inset:0;border-radius:50%;pointer-events:none;
+    background:radial-gradient(ellipse 38% 22% at 28% 14%, rgba(255,255,255,.22), rgba(255,255,255,0) 70%),
+               radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 60%, rgba(0,0,0,.5) 100%)}
+  .panel{width:330px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:15px}
+  .concepts{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:14px}
+  button{background:#1a1e26;color:var(--txt);border:1px solid #2b3140;border-radius:8px;padding:9px 6px;
+         font-size:12.5px;cursor:pointer;font-family:inherit;text-align:left;line-height:1.25}
+  button:hover{background:#20262f}
+  button.on{background:#0c3a44;border-color:var(--ac);color:#a6ecf7}
+  button small{display:block;color:var(--dim);font-size:10px;margin-top:2px}
+  button.on small{color:#7fc9d6}
+  .states{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+  .states button{padding:6px 10px;text-align:center}
+  .kv{display:flex;justify-content:space-between;font-size:11.5px;color:var(--dim);padding:3px 0;border-bottom:1px dashed #1c2028}
+  .kv b{color:var(--txt);font-weight:500}
+  .hint{font-size:11px;color:var(--dim);line-height:1.65;margin-top:10px}
+  label.sl{display:block;font-size:11px;color:var(--dim);margin:9px 0 2px}
+  input[type=range]{width:100%}
+</style>
+</head>
+<body>
+<div>
+  <h1>屏幕实尺寸 466×466（1px = 0.0954mm）</h1>
+  <div class="scr"><canvas id="c1" width="466" height="466"></canvas></div>
+</div>
+
+<div>
+  <h1>透过 Ø70 实心半球看（屏幕占球径 63.5%）</h1>
+  <div class="ball"><canvas id="c2" width="320" height="320"></canvas><div class="gloss"></div></div>
+</div>
+
+<div class="panel">
+  <h1>五种面部语言</h1>
+  <div class="concepts" id="cpt"></div>
+
+  <h1>状态</h1>
+  <div class="states" id="sts"></div>
+
+  <label class="sl">整体亮度 <span id="bv">100%</span></label>
+  <input type="range" id="br" min="20" max="100" value="100">
+
+  <div class="kv"><span>球 / 屏</span><b>Ø70 / Ø44.4</b></div>
+  <div class="kv"><span>眼睛尺寸</span><b id="eyesize">47×117 px</b></div>
+  <div class="kv"><span>帧率</span><b id="fps">–</b></div>
+
+  <div class="hint">
+    五个概念都不是"换颜色"，是换**构造方式**：实心胶囊 / 液态 / 粒子 / 光斑 / 线框。<br>
+    选一个方向，我再往深里做（每个状态一套完整动效 + LVGL 参数）。
+  </div>
+</div>
+
+<script>
+const c1 = document.getElementById('c1'), x1 = c1.getContext('2d');
+const c2 = document.getElementById('c2'), x2 = c2.getContext('2d');
+const off = document.createElement('canvas'); off.width = 466; off.height = 466;
+const xo = off.getContext('2d');
+
+const W = 466, CX = W/2;
+// Ø70 球 + 1.75" 屏（Ø44.4）：眼高 = 70*16% = 11.2mm = 117px
+const EYE_H = 117, EYE_W = 47, GAP = 157;
+let brightness = 1, t = 0;
+
+const CONCEPTS = {
+  moth:    {name:'蛾眼', sub:'实心胶囊 · 最稳'},
+  tide:    {name:'潮汐', sub:'液态光 · 有呼吸'},
+  star:    {name:'星野', sub:'粒子 · 会散开'},
+  breath:  {name:'息',   sub:'光斑 · 最抽象'},
+  dial:    {name:'晷',   sub:'线框 · 最克制'},
+};
+
+const STATES = {
+  idle:  {o:1.00, glow:0.55, sp:1.00, alpha:0.95},
+  listen:{o:1.14, glow:0.85, sp:1.30, alpha:1.00},
+  think: {o:0.80, glow:0.45, sp:0.70, alpha:0.90},
+  speak: {o:0.96, glow:1.00, sp:1.55, alpha:1.00},
+  happy: {o:0.72, glow:0.90, sp:1.20, alpha:1.00},
+  sleep: {o:0.07, glow:0.22, sp:0.40, alpha:0.55},
+};
+
+// 支持 ?c=tide&s=listen 直接进入某个概念/状态（方便截图与分享）
+const _q = new URLSearchParams(location.search);
+let concept = _q.get('c') || 'moth';
+let state = _q.get('s') || 'idle';
+let cur = {...(STATES[state]||STATES.idle)}, target = {...(STATES[state]||STATES.idle)};
+let blinkT = -1, nextBlink = 3.0;
+
+// ---------- 构建按钮 ----------
+const cp = document.getElementById('cpt');
+Object.entries(CONCEPTS).forEach(([k,v])=>{
+  const b = document.createElement('button');
+  b.innerHTML = v.name + '<small>' + v.sub + '</small>';
+  b.dataset.k = k; if (k===concept) b.classList.add('on');
+  b.onclick = ()=>{ concept = k; [...cp.children].forEach(x=>x.classList.toggle('on', x.dataset.k===k)); };
+  cp.appendChild(b);
+});
+const st = document.getElementById('sts');
+Object.keys(STATES).forEach(k=>{
+  const b = document.createElement('button');
+  b.textContent = k; b.dataset.k = k; if (k===state) b.classList.add('on');
+  b.onclick = ()=>{ state = k; target = {...STATES[k]}; nextBlink = t + 1.2;
+    [...st.children].forEach(x=>x.classList.toggle('on', x.dataset.k===k)); };
+  st.appendChild(b);
+});
+document.getElementById('br').oninput = e=>{
+  brightness = e.target.value/100;
+  document.getElementById('bv').textContent = e.target.value + '%';
+};
+
+// ---------- 通用绘制 ----------
+function eyePath(ctx, cx, cy, w, h, r){
+  const rr = Math.min(r, Math.min(w,h)/2);
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(cx-w/2, cy-h/2, w, Math.max(1,h), rr);
+  else ctx.rect(cx-w/2, cy-h/2, w, Math.max(1,h));
+}
+
+function drawMoth(ctx, cx, cy, w, h, a, glow){
+  const g = ctx.createLinearGradient(cx, cy-h/2, cx, cy+h/2);
+  g.addColorStop(0,'rgba(224,251,255,'+a+')');
+  g.addColorStop(.5,'rgba(127,227,240,'+a+')');
+  g.addColorStop(1,'rgba(58,169,196,'+a+')');
+  ctx.save();
+  ctx.shadowColor = 'rgba(90,205,230,'+(0.55*glow)+')';
+  ctx.shadowBlur = 14 + 14*glow;
+  ctx.fillStyle = g;
+  eyePath(ctx, cx, cy, w, h, w/2); ctx.fill();
+  ctx.restore();
+  // 内层高光
+  ctx.save();
+  ctx.globalAlpha = 0.35*a;
+  const g2 = ctx.createLinearGradient(cx, cy-h*0.4, cx, cy-h*0.05);
+  g2.addColorStop(0,'rgba(255,255,255,.9)'); g2.addColorStop(1,'rgba(255,255,255,0)');
+  ctx.fillStyle = g2;
+  eyePath(ctx, cx, cy - h*0.1, w*0.55, h*0.42, w*0.28); ctx.fill();
+  ctx.restore();
+}
+
+function drawTide(ctx, cx, cy, w, h, a, glow, ph){
+  // 液态：左右边缘用正弦扰动，形状缓慢起伏
+  const N = 26, hw = w/2;
+  ctx.save();
+  const g = ctx.createLinearGradient(cx, cy-h/2, cx, cy+h/2);
+  g.addColorStop(0,'rgba(200,250,255,'+a+')');
+  g.addColorStop(.45,'rgba(110,222,238,'+a+')');
+  g.addColorStop(1,'rgba(46,150,180,'+a+')');
+  ctx.shadowColor = 'rgba(90,205,230,'+(0.6*glow)+')';
+  ctx.shadowBlur = 16 + 16*glow;
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  for (let i=0;i<=N;i++){
+    const p = i/N, y = cy - h/2 + h*p;
+    const wob = Math.sin(p*Math.PI*3 + ph)*hw*0.14 + Math.sin(p*Math.PI*5 + ph*1.7)*hw*0.05;
+    const x = cx - hw + wob;
+    i? ctx.lineTo(x,y) : ctx.moveTo(x,y);
+  }
+  for (let i=N;i>=0;i--){
+    const p = i/N, y = cy - h/2 + h*p;
+    const wob = Math.sin(p*Math.PI*3 + ph + Math.PI)*hw*0.14 + Math.sin(p*Math.PI*5 + ph*1.7 + 1)*hw*0.05;
+    ctx.lineTo(cx + hw + wob, y);
+  }
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+const STARS = Array.from({length:46}, (_,i)=>({
+  u: (Math.sin(i*12.9898)*43758.5453)%1,
+  v: (Math.sin(i*78.233)*43758.5453)%1,
+  s: 0.6 + (Math.abs(Math.sin(i*3.7))*1.6),
+  p: i*0.7
+}));
+
+function drawStar(ctx, cx, cy, w, h, a, glow, ph){
+  // 极暗的底盘 + 内部星点 + 缓慢旋转的星云
+  ctx.save();
+  ctx.globalAlpha = 0.10*a;
+  ctx.fillStyle = '#5fd8ea';
+  eyePath(ctx, cx, cy, w, h, w/2); ctx.fill();
+  ctx.globalAlpha = 1;
+  eyePath(ctx, cx, cy, w, h, w/2); ctx.clip();
+  // 星云
+  const rg = ctx.createRadialGradient(cx, cy, 1, cx, cy, h*0.5);
+  rg.addColorStop(0,'rgba(120,220,240,'+(0.20*glow*a)+')');
+  rg.addColorStop(1,'rgba(40,90,140,0)');
+  ctx.fillStyle = rg; ctx.fillRect(cx-w, cy-h, w*2, h*2);
+  // 星点
+  STARS.forEach(s=>{
+    const x = cx + (s.u-0.5)*w*0.86;
+    const y = cy + (s.v-0.5)*h*0.92;
+    const tw = 0.35 + 0.65*Math.abs(Math.sin(ph*1.6 + s.p));
+    ctx.fillStyle = 'rgba(210,250,255,'+(a*tw*0.95)+')';
+    ctx.beginPath(); ctx.arc(x, y, s.s, 0, 7); ctx.fill();
+  });
+  ctx.restore();
+}
+
+function drawBreath(ctx, cx, cy, w, h, a, glow, ph){
+  // 不用眼睛：两团光斑，此消彼长
+  const pulse = 1 + Math.sin(ph)*0.10;
+  [[cx-GAP/2, 1],[cx+GAP/2, -1]].forEach(([x, dir])=>{
+    const p = 1 + Math.sin(ph + (dir>0?Math.PI:0))*0.16;
+    const R = (w*0.95) * p * pulse;
+    const g = ctx.createRadialGradient(x, cy, 0, x, cy, R);
+    g.addColorStop(0,'rgba(225,252,255,'+(a*0.95)+')');
+    g.addColorStop(.35,'rgba(120,228,244,'+(a*0.55)+')');
+    g.addColorStop(1,'rgba(40,140,170,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, cy, R, 0, 7); ctx.fill();
+  });
+  // 极细的环
+  ctx.strokeStyle = 'rgba(120,220,240,'+(a*0.16)+')';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(cx, cy, 190, 0, 7); ctx.stroke();
+}
+
+function drawDial(ctx, cx, cy, w, h, a, glow, ph){
+  // 线框：描边胶囊 + 刻度 + 指针
+  ctx.save();
+  ctx.strokeStyle = 'rgba(150,238,250,'+(a*0.95)+')';
+  ctx.lineWidth = 2;
+  ctx.shadowColor = 'rgba(90,205,230,'+(0.5*glow)+')';
+  ctx.shadowBlur = 10*glow;
+  eyePath(ctx, cx, cy, w, h, w/2); ctx.stroke();
+  ctx.shadowBlur = 0;
+  // 刻度（下半圈）
+  ctx.strokeStyle = 'rgba(140,225,240,'+(a*0.5)+')';
+  ctx.lineWidth = 1.2;
+  for (let i=0;i<=10;i++){
+    const p = i/10, y = cy + h*0.28 + p*h*0.20;
+    const len = (i%5===0) ? w*0.22 : w*0.12;
+    ctx.beginPath();
+    ctx.moveTo(cx - len, y); ctx.lineTo(cx - len*0.45, y); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx + len*0.45, y); ctx.lineTo(cx + len, y); ctx.stroke();
+  }
+  // 指针：随相位缓慢摆动
+  const ang = Math.sin(ph*0.8)*0.5;
+  ctx.strokeStyle = 'rgba(215,250,255,'+(a*0.85)+')';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + h*0.30);
+  ctx.lineTo(cx + Math.sin(ang)*w*0.35, cy + h*0.30 - Math.cos(ang)*h*0.16);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// ---------- 主渲染 ----------
+function drawScreen(ctx, s, blink){
+  ctx.clearRect(0,0,W,W);
+  ctx.fillStyle = '#000'; ctx.fillRect(0,0,W,W);
+  // 3% 径向底，避免"太干净"暴露屏边
+  const bg = ctx.createRadialGradient(CX,CX,8, CX,CX, W*0.55);
+  bg.addColorStop(0,'rgba(14,17,21,.85)'); bg.addColorStop(1,'rgba(0,0,0,1)');
+  ctx.fillStyle = bg; ctx.fillRect(0,0,W,W);
+
+  const h = Math.max(2, EYE_H * s.o * (1 - blink));
+  const a = s.alpha * brightness;
+  const ph = t * s.sp;
+  const cy = CX;
+
+  [cxLeft, cxRight].forEach((cx, i)=>{
+    const phase = ph + i*0.9;
+    if (concept==='moth')   drawMoth(ctx, cx, cy, EYE_W, h, a, s.glow);
+    if (concept==='tide')   drawTide(ctx, cx, cy, EYE_W, h, a, s.glow, phase);
+    if (concept==='star')   drawStar(ctx, cx, cy, EYE_W, h, a, s.glow, phase);
+    if (concept==='breath') drawBreath(ctx, cx, cy, EYE_W, Math.max(h, EYE_W), a, s.glow, phase);
+    if (concept==='dial')   drawDial(ctx, cx, cy, EYE_W, h, a, s.glow, phase);
+  });
+}
+
+const cxLeft = CX - GAP/2, cxRight = CX + GAP/2;
+
+function render(){
+  // blink 状态机
+  let blink = 0;
+  if (state!=='sleep'){
+    if (blinkT < 0 && t > nextBlink){ blinkT = 0; }
+    if (blinkT >= 0){
+      blinkT += 1/60;
+      const p = blinkT/0.13;
+      if (p>=1){ blinkT = -1; nextBlink = t + 3.2 + Math.random()*3.2; }
+      else blink = Math.sin(Math.min(1,p)*Math.PI);
+    }
+  }
+  drawScreen(xo, cur, blink);
+  x1.clearRect(0,0,W,W); x1.drawImage(off,0,0);
+
+  // 球视角：Ø70 → 320px，屏 Ø44.4 → 203px
+  const d = Math.round(320 * 44.4/70);
+  x2.clearRect(0,0,320,320);
+  x2.fillStyle = '#000'; x2.fillRect(0,0,320,320);
+  x2.drawImage(off, (320-d)/2, (320-d)/2, d, d);
+}
+
+// ---------- 主循环 ----------
+let last = performance.now(), acc = 0, frames = 0;
+function loop(now){
+  const dt = Math.min(0.05, (now-last)/1000); last = now;
+  t += dt;
+  const k = Math.min(1, dt*4.0);
+  for (const key in target) cur[key] = cur[key] + (target[key]-cur[key])*k;
+  render();
+
+  acc += dt; frames++;
+  if (acc > 0.5){
+    document.getElementById('fps').textContent = Math.round(frames/acc) + ' fps';
+    document.getElementById('eyesize').textContent =
+      EYE_W + '×' + Math.round(EYE_H*cur.o) + ' px';
+    acc = 0; frames = 0;
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
