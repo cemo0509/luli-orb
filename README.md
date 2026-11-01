@@ -9,7 +9,7 @@
 
 ## 一句话方案
 
-**Ø70 实心玻璃半球（凸面朝前、平面朝后）+ Ø68 黑色哑光遮光盖（贴平面）+ 1.75" 圆 AMOLED（Ø44.4）装在遮光盖中心的 Ø50 窗后 + 机身（电池/喇叭/灯环）。**
+**Ø70 实心玻璃半球（凸面朝前、平面朝后）+ Ø68 黑色哑光遮光盖（贴平面）+ 1.75" 圆 AMOLED（Ø44.4）装在遮光盖中心的 Ø50 窗后 + **打印后半球**（后脸 + 遮光面 + 容腔 + 出声孔）。**
 
 眼睛之所以「浮」在球心，靠的不是投影也不是全息，而是三件事：
 
@@ -41,7 +41,8 @@
 | [docs/13_face_spec.md](docs/13_face_spec.md) | ★ **面部定稿「一滴光」**：token、七状态、行为引擎、验收 |
 | [docs/14_screen_mcu.md](docs/14_screen_mcu.md) | ★ **屏幕与主控定稿**：为什么选 1.43C、遮光盖重算、采购与验证 |
 | [hardware/hemisphere.py](hardware/hemisphere.py) | ★ 球径 → 屏占比 / 遮光板 / 眼睛像素 / 重量 |
-| [hardware/back_cover.scad](hardware/back_cover.scad) | ★ 遮光后盖参数化模型（改 `BALL_D` 一个数） |
+| [hardware/rear_shell.scad](hardware/rear_shell.scad) | ★ **后半球一体机身**（新结构，两件套） |
+| [hardware/back_cover.scad](hardware/back_cover.scad) | 旧方案：独立遮光后盖（已被后半球取代，存档） |
 | [hardware/gen_face_assets.py](hardware/gen_face_assets.py) | 生成面部固件资源（bloom / hot / glint） |
 | [hardware/params.py](hardware/params.py) | 早期空心球方案的参数计算器（存档） |
 | [hardware/ball_lens.py](hardware/ball_lens.py) | 整球透镜核算（对照组，方案已否） |
