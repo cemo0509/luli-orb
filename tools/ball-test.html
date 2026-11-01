@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>琉璃 ORB · 实物测试</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;
+            font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;color:#fff}
+  #cv{position:fixed;inset:0;width:100%;height:100%;display:block}
+  .bar{position:fixed;left:0;right:0;bottom:0;padding:14px 16px calc(14px + env(safe-area-inset-bottom));
+       background:linear-gradient(transparent,rgba(0,0,0,.85));display:flex;gap:14px;align-items:center;
+       transition:opacity .3s;font-size:13px;z-index:2}
+  .bar.hide{opacity:0;pointer-events:none}
+  .bar{overflow:hidden}
+  .bar input[type=range]{flex:1 1 0;min-width:0;accent-color:#7fe6f2}
+  .bar label{color:#8fa0b3;white-space:nowrap;flex:0 0 auto}
+  .bar b{color:#9feef8;font-variant-numeric:tabular-nums}
+  .tip{position:fixed;top:14px;left:0;right:0;text-align:center;font-size:12px;color:#5f6b7c;
+       z-index:2;transition:opacity .4s;pointer-events:none;line-height:1.7}
+  .tip.hide{opacity:0}
+  .st{position:fixed;top:64px;left:50%;transform:translateX(-50%);font-size:12px;color:#7fe6f2;
+      letter-spacing:2px;opacity:.55;z-index:2;transition:opacity .6s}
+  .st.hide{opacity:0}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div class="tip" id="tip">
+  把球平放在圆环上（平面朝屏），眼睛凑近从上方看<br>
+  对不上就拖底部滑块，把圆环调到跟球边缘一样大
+</div>
+<div class="st" id="st">待机</div>
+<div class="bar" id="bar">
+  <label>球径 <b id="dv">70.0</b> mm</label>
+  <input type="range" id="d" min="40" max="130" step="0.5" value="70">
+</div>
+
+<script>
+'use strict';
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+const dEl = document.getElementById('d'), dvEl = document.getElementById('dv');
+const bar = document.getElementById('bar'), tip = document.getElementById('tip'), stEl = document.getElementById('st');
+
+// ── 物理标定：先假设屏幕 CSS 像素 ≈ 96dpi（3.7795px/mm），用滑块修正
+let PX_PER_MM = 3.7795;
+let ballMM = 70;
+let hideTimer = null;
+
+// ── 面部比例（全部以球径为基准，与 docs/13 一致）
+const EYE_H_RATIO = 0.200;   // 147px / 466px 屏 … 但屏幕上 44.4mm 占球径 63.5%
+// 用球径直接算：眼高 = 球径 20%
+const EYE_W_RATIO = 0.080;
+const GAP_RATIO   = 0.259;
+const EYE_Y_RATIO = 0.006;   // 略低于球心
+
+const C_HI=[244,255,255], C_MID=[138,240,250], C_LO=[28,158,190];
+const STATES = [
+  {k:'idle',   n:'待机', h:1.00, w:1.00, glow:.55, a:.95},
+  {k:'listen', n:'聆听', h:1.06, w:1.10, glow:.88, a:1.00},
+  {k:'think',  n:'思考', h:0.90, w:0.94, glow:.45, a:.90},
+  {k:'speak',  n:'说话', h:0.97, w:1.00, glow:1.00, a:1.00},
+  {k:'happy',  n:'开心', h:0.80, w:1.16, glow:.92, a:1.00},
+  {k:'sleep',  n:'休眠', h:0.075,w:1.30, glow:.18, a:.55},
+];
+let si = 0, cur = {...STATES[0]}, t = 0;
+let blinkT = -1, nextBlink = 3.0, gazeX = 0, gazeY = 0, gazeNext = 1.0;
+
+function resize(){
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  cv.width = Math.round(innerWidth * dpr);
+  cv.height = Math.round(innerHeight * dpr);
+  cv.style.width = innerWidth+'px'; cv.style.height = innerHeight+'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+addEventListener('resize', resize);
+
+dEl.oninput = () => { ballMM = +dEl.value; dvEl.textContent = ballMM.toFixed(1); showBar(); };
+function showBar(){
+  bar.classList.remove('hide');
+  clearTimeout(hideTimer);
+  hideTimer = setTimeout(()=>{ bar.classList.add('hide'); tip.classList.add('hide'); stEl.classList.add('hide'); }, 3500);
+}
+addEventListener('pointerdown', e => {
+  if (e.target === dEl) return;
+  // 点屏幕切换状态
+  si = (si+1) % STATES.length;
+  stEl.textContent = STATES[si].n;
+  stEl.classList.remove('hide');
+  showBar();
+});
+
+const rgba = (c,a)=>'rgba('+c[0]+','+c[1]+','+c[2]+','+a.toFixed(3)+')';
+function capsule(x,y,w,h,s){
+  const ww=w*s, hh=Math.max(1,h*s), r=Math.min(ww,hh)/2;
+  ctx.beginPath();
+  ctx.roundRect(x-ww/2, y-hh/2, ww, hh, r);
+}
+
+function drawDrop(cx, cy, w, h, s, ph, idx){
+  const a = s.a, hx = Math.sin(ph*0.9+idx*1.7)*w*0.05 + gazeX*0.7,
+        hy = Math.cos(ph*0.7+idx*1.1)*h*0.03 + gazeY*0.7;
+  ctx.save();
+  ctx.shadowColor = 'rgba(120,225,245,'+(0.55*s.glow).toFixed(3)+')';
+  ctx.shadowBlur = 11+15*s.glow;
+  ctx.fillStyle = rgba(C_MID, a*0.55);
+  capsule(cx+hx*0.3, cy+hy*0.3, w, h, 1.0); ctx.fill();
+  ctx.restore();
+
+  [[1.30,.030],[1.17,.070],[1.08,.150],[1.00,.52]].forEach(([sc,al])=>{
+    ctx.fillStyle = rgba(C_MID, a*al);
+    capsule(cx, cy, w, h, sc); ctx.fill();
+  });
+
+  const g = ctx.createLinearGradient(cx, cy-h/2, cx, cy+h/2);
+  g.addColorStop(0,   rgba(C_HI,  a*0.98));
+  g.addColorStop(0.38,rgba(C_MID, a*0.92));
+  g.addColorStop(1,   rgba(C_LO,  a*0.86));
+  ctx.fillStyle = g;
+  capsule(cx, cy, w, h, 1.0); ctx.fill();
+
+  if (h > 12){
+    ctx.save();
+    capsule(cx, cy, w, h, 1.0); ctx.clip();
+    const rg = ctx.createRadialGradient(cx+hx, cy-h*0.20+hy, 1, cx+hx, cy-h*0.20+hy, h*0.46);
+    rg.addColorStop(0, rgba(C_HI, a*0.78));
+    rg.addColorStop(1, 'rgba(244,255,255,0)');
+    ctx.fillStyle = rg; ctx.fillRect(cx-w, cy-h, w*2, h*2);
+
+    const lw = Math.max(2, w*0.085), lx = cx - w*0.235 + hx*0.6;
+    const ly0 = cy-h*0.345, ly1 = cy+h*0.045;
+    const lg = ctx.createLinearGradient(lx, ly0, lx, ly1);
+    lg.addColorStop(0,'rgba(255,255,255,0)');
+    lg.addColorStop(.22,'rgba(255,255,255,'+(a*0.62).toFixed(3)+')');
+    lg.addColorStop(.72,'rgba(255,255,255,'+(a*0.30).toFixed(3)+')');
+    lg.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.save();
+    ctx.shadowColor='rgba(255,255,255,'+(a*0.35).toFixed(3)+')'; ctx.shadowBlur=5;
+    ctx.strokeStyle=lg; ctx.lineWidth=lw; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(lx,ly0); ctx.lineTo(lx,ly1); ctx.stroke();
+    ctx.restore();
+    ctx.restore();
+  }
+}
+
+function frame(dt){
+  t += dt;
+  const W = innerWidth, H = innerHeight;
+  const D = ballMM * PX_PER_MM;          // 球在屏幕上的直径（px）
+  const cx = W/2, cy = H/2 + D*EYE_Y_RATIO;
+
+  // 状态插值
+  const s = STATES[si];
+  const k = Math.min(1, dt*5);
+  for (const key of ['h','w','glow','a']) cur[key] += (s[key]-cur[key])*k;
+
+  // 眨眼
+  if (si !== 5){
+    if (blinkT < 0 && t > nextBlink) blinkT = 0;
+  }
+  let bp = 0;
+  if (blinkT >= 0){
+    blinkT += dt;
+    const p = blinkT/0.13;
+    if (p >= 1){ blinkT = -1; nextBlink = t + 3.2 + Math.random()*3.6; }
+    else bp = Math.sin(Math.min(1,p)*Math.PI);
+  }
+
+  // 扫视
+  if (t > gazeNext){
+    gazeX = (Math.random()-0.5) * D*0.10;
+    gazeY = (Math.random()-0.5) * D*0.05;
+    gazeNext = t + 1.3 + Math.random()*2.2;
+  }
+
+  ctx.fillStyle='#000'; ctx.fillRect(0,0,W,H);
+
+  // 校准圈（球放上去正好盖住）
+  ctx.save();
+  ctx.strokeStyle='rgba(127,230,242,.20)';
+  ctx.lineWidth=1.5; ctx.setLineDash([6,6]);
+  ctx.beginPath(); ctx.arc(W/2, H/2, D/2, 0, 7); ctx.stroke();
+  ctx.restore();
+
+  const eyeH = D*EYE_H_RATIO*cur.h*(1-bp);
+  const eyeW = D*EYE_W_RATIO*cur.w*(1+0.34*bp);
+  const gap  = D*GAP_RATIO;
+  const aBoost = Math.min(1, cur.a*(1+0.30*bp));
+  const s2 = {glow:cur.glow, a:aBoost};
+
+  drawDrop(cx-gap/2+gazeX, cy+gazeY, eyeW, eyeH, s2, t*1.1, 0);
+  drawDrop(cx+gap/2+gazeX*0.94, cy+gazeY*0.94, eyeW*0.97, eyeH*0.995, s2, t*1.1, 1);
+}
+
+let last = performance.now();
+function loop(now){
+  const dt = Math.min(0.05,(now-last)/1000); last = now;
+  frame(dt);
+  requestAnimationFrame(loop);
+}
+
+resize(); showBar();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
